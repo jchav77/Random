@@ -1,0 +1,2057 @@
+# **Impound Lien Loss Analysis: Jupyter Notebook Blueprint**
+
+-----
+
+```markdown
+# Impound Lien Loss Analysis - Step-by-Step Notebook
+
+**Project Objective:** Investigate whether impound companies are systematically targeting high-value vehicles for lien losses, identify coverage gaps in our verification process, and provide actionable recommendations to reduce losses.
+
+**Estimated Time:** 2-3 weeks  
+**Output:** Executive-ready 3-page deck with recommendations
+
+---
+
+## Table of Contents
+1. [Setup & Data Loading](#setup)
+2. [Phase 1: Data Collection & Preparation](#phase1)
+3. [Phase 2: Coverage Gap Analysis](#phase2)
+4. [Phase 3: Trend & Pattern Analysis](#phase3)
+5. [Phase 4: Synthesis & Quantification](#phase4)
+6. [Phase 5: Visualization & Insights](#phase5)
+7. [Phase 6: Recommendations & Output](#phase6)
+
+---
+
+## Setup & Environment Preparation {#setup}
+
+**What you're doing:** Setting up your Python environment with necessary libraries.
+
+**Expected output:** All libraries imported successfully, ready to begin analysis.
+```
+
+```python
+# Cell 1: Import Required Libraries
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from datetime import datetime
+import warnings
+warnings.filterwarnings('ignore')
+
+# Set display options for better readability
+pd.set_option('display.max_columns', None)
+pd.set_option('display.max_rows', 100)
+pd.set_option('display.float_format', lambda x: '${:,.2f}'.format(x) if abs(x) > 1 else '{:.2%}'.format(x))
+
+# Set style for visualizations
+plt.style.use('seaborn-v0_8-darkgrid')
+sns.set_palette("husl")
+
+print("✓ All libraries imported successfully")
+print("✓ Environment ready for analysis")
+```
+
+```markdown
+---
+
+## Phase 1: Data Collection & Preparation {#phase1}
+
+---
+
+### Step 1.1: Load and Inspect Raw Data
+
+**What you're doing:** Loading your lien loss dataset and performing initial inspection.
+
+**Key questions to answer:**
+- How many total records do we have?
+- What time period does this cover?
+- What columns are available?
+- Are there any obvious data quality issues?
+
+**Expected output:** 
+- Total record count: [N] records
+- Date range: [Start Date] to [End Date]
+- Column list displayed
+- Initial data quality assessment
+```
+
+```python
+# Cell 2: Load Raw Data
+# TODO: Update file path to your actual data source
+file_path = 'path/to/your/lien_loss_data.csv'
+
+# Load the data
+df_raw = pd.read_csv(file_path)
+
+# Display basic information
+print(f"{'='*60}")
+print(f"DATASET OVERVIEW")
+print(f"{'='*60}")
+print(f"\nTotal Records: {len(df_raw):,}")
+print(f"\nColumns ({len(df_raw.columns)}):")
+print(df_raw.columns.tolist())
+print(f"\nDate Range:")
+if 'loss_date' in df_raw.columns:
+    print(f"  Start: {df_raw['loss_date'].min()}")
+    print(f"  End: {df_raw['loss_date'].max()}")
+print(f"\nData Types:")
+print(df_raw.dtypes)
+print(f"\n{'='*60}")
+print(f"FIRST 5 RECORDS:")
+print(f"{'='*60}")
+df_raw.head()
+```
+
+```markdown
+---
+
+### Step 1.2: Data Cleaning and Filtering
+
+**What you're doing:** Filtering for true impound losses only (excluding abandoned vehicles, voluntary surrenders, theft recovery).
+
+**Critical validation:** Confirm with stakeholders that your filtering logic is correct.
+
+**Expected output:**
+- Original record count: [N]
+- After filtering: [M] records
+- Excluded records: [N-M] records
+- Percentage of data retained: [X%]
+
+**Pro Tip:** Document your filtering criteria explicitly. You'll need to explain this to stakeholders.
+```
+
+```python
+# Cell 3: Filter for Impound Losses Only
+# TODO: Update these column names and filter conditions based on your actual data schema
+
+# Create a copy for filtering
+df_impound = df_raw.copy()
+
+# Example filtering logic - ADJUST BASED ON YOUR DATA STRUCTURE
+# Filter 1: Loss type should be "Impound" (exclude abandoned, voluntary surrender, theft)
+df_impound = df_impound[df_impound['loss_type'] == 'Impound']
+
+# Filter 2: Exclude any records with missing critical fields
+df_impound = df_impound.dropna(subset=['case_id', 'loss_date', 'vehicle_value', 'state'])
+
+# Filter 3: Ensure date range is within analysis period (last 12 months)
+# TODO: Adjust these dates based on your analysis period
+start_date = '2024-07-01'
+end_date = '2025-07-31'
+df_impound['loss_date'] = pd.to_datetime(df_impound['loss_date'])
+df_impound = df_impound[(df_impound['loss_date'] >= start_date) & (df_impound['loss_date'] <= end_date)]
+
+# Summary of filtering
+print(f"{'='*60}")
+print(f"DATA FILTERING SUMMARY")
+print(f"{'='*60}")
+print(f"\nOriginal Records: {len(df_raw):,}")
+print(f"After Filtering: {len(df_impound):,}")
+print(f"Excluded Records: {len(df_raw) - len(df_impound):,}")
+print(f"Retention Rate: {(len(df_impound)/len(df_raw))*100:.1f}%")
+print(f"\n⚠️  IMPORTANT: Confirm with stakeholders that this filtering logic is correct!")
+print(f"{'='*60}")
+
+# Store the total count - this is your [Total N] for the entire analysis
+TOTAL_CASES = len(df_impound)
+print(f"\n✓ TOTAL CASES FOR ANALYSIS: {TOTAL_CASES:,}")
+```
+
+```markdown
+---
+
+### Step 1.3: Calculate Average Vehicle Values
+
+**What you're doing:** 
+1. Calculate average vehicle value for impound losses
+2. Calculate benchmark (average value for ALL repo'd vehicles)
+3. Compare to identify if high-value vehicles are being targeted
+
+**Expected output:**
+- Average impound loss value: $[X]K
+- Portfolio benchmark value: $[Y]K  
+- Difference: [+/-Z%]
+- Interpretation: Targeting detected? Yes/No
+
+**Why this matters:** If impound vehicles are significantly HIGHER value than benchmark, it suggests targeting. If equal or lower, it rules out targeting.
+```
+
+```python
+# Cell 4: Calculate Vehicle Value Metrics
+
+# Calculate average vehicle value for impound losses
+avg_impound_value = df_impound['vehicle_value'].mean()
+
+# TODO: Load benchmark data (all repo'd vehicles) - adjust file path and logic as needed
+# For now, we'll use a placeholder. Replace with actual benchmark calculation.
+# Option 1: Load from separate file
+# df_benchmark = pd.read_csv('path/to/all_repos.csv')
+# benchmark_value = df_benchmark['vehicle_value'].mean()
+
+# Option 2: If benchmark is a known value, hardcode it temporarily
+benchmark_value = 17000  # TODO: Replace with actual calculation
+
+# Calculate difference
+value_difference_pct = ((avg_impound_value - benchmark_value) / benchmark_value) * 100
+
+# Display results
+print(f"{'='*60}")
+print(f"VEHICLE VALUE ANALYSIS")
+print(f"{'='*60}")
+print(f"\nAverage Impound Loss Vehicle Value: ${avg_impound_value:,.0f}")
+print(f"Portfolio Benchmark (All Repos): ${benchmark_value:,.0f}")
+print(f"Difference: {value_difference_pct:+.1f}%")
+print(f"\n{'='*60}")
+print(f"INTERPRETATION:")
+print(f"{'='*60}")
+
+if value_difference_pct > 10:
+    print("⚠️  RED FLAG: Impound losses are significantly HIGHER value than benchmark")
+    print("   → Possible targeting of high-value vehicles. Investigate further.")
+    fraud_risk = "HIGH"
+elif value_difference_pct < -10:
+    print("✓ GOOD NEWS: Impound losses are LOWER value than benchmark")
+    print("   → No evidence of targeting high-value vehicles. Rules out fraud concern.")
+    fraud_risk = "LOW"
+else:
+    print("✓ NEUTRAL: Impound losses are similar value to benchmark")
+    print("   → No clear pattern of targeting. Likely random distribution.")
+    fraud_risk = "LOW"
+
+# Store for later use
+AVG_IMPOUND_VALUE = avg_impound_value
+BENCHMARK_VALUE = benchmark_value
+FRAUD_RISK = fraud_risk
+
+print(f"\n✓ Fraud Risk Assessment: {FRAUD_RISK}")
+```
+
+```markdown
+---
+
+### Step 1.4: Identify Repeat Offenders
+
+**What you're doing:** Finding impound companies with 3 or more lien loss occurrences.
+
+**Expected output:**
+- Number of unique impound companies: [N]
+- Number of repeat offenders (3+ losses): [M]
+- Total cases from repeat offenders: [X]
+- Average vehicle value for repeat offenders: $[Y]K
+- Top 5 repeat offenders by loss count
+
+**Why this matters:** Helps determine if a small set of companies are responsible for disproportionate losses (potential fraud) or if it's distributed (operational issue).
+```
+
+```python
+# Cell 5: Identify and Analyze Repeat Offenders
+
+# TODO: Adjust column name based on your data schema
+company_column = 'impound_company_name'  # Update this to match your data
+
+# Count losses per company
+company_losses = df_impound.groupby(company_column).agg({
+    'case_id': 'count',
+    'vehicle_value': 'mean'
+}).rename(columns={
+    'case_id': 'loss_count',
+    'vehicle_value': 'avg_vehicle_value'
+}).sort_values('loss_count', ascending=False)
+
+# Identify repeat offenders (3+ losses)
+repeat_offenders = company_losses[company_losses['loss_count'] >= 3]
+
+# Calculate metrics
+num_repeat_offenders = len(repeat_offenders)
+cases_from_repeats = repeat_offenders['loss_count'].sum()
+avg_value_repeats = repeat_offenders['avg_vehicle_value'].mean()
+
+# Display summary
+print(f"{'='*60}")
+print(f"REPEAT OFFENDER ANALYSIS")
+print(f"{'='*60}")
+print(f"\nTotal Unique Impound Companies: {len(company_losses):,}")
+print(f"Repeat Offenders (3+ losses): {num_repeat_offenders:,}")
+print(f"Total Cases from Repeat Offenders: {cases_from_repeats:,} ({(cases_from_repeats/TOTAL_CASES)*100:.1f}% of total)")
+print(f"Average Vehicle Value (Repeat Offenders): ${avg_value_repeats:,.0f}")
+print(f"\n{'='*60}")
+print(f"TOP 5 REPEAT OFFENDERS:")
+print(f"{'='*60}")
+print(repeat_offenders.head().to_string())
+
+# Comparison to benchmark
+print(f"\n{'='*60}")
+print(f"TARGETING ASSESSMENT:")
+print(f"{'='*60}")
+print(f"Repeat Offender Avg Value: ${avg_value_repeats:,.0f}")
+print(f"Portfolio Benchmark: ${BENCHMARK_VALUE:,.0f}")
+difference_pct = ((avg_value_repeats - BENCHMARK_VALUE) / BENCHMARK_VALUE) * 100
+print(f"Difference: {difference_pct:+.1f}%")
+
+if difference_pct < -10:
+    print("\n✓ CLEAR FINDING: Repeat offenders target LOWER value vehicles")
+    print("   → Rules out malicious targeting. Consistent with operational scale.")
+else:
+    print("\n⚠️  INVESTIGATE: Repeat offenders target higher value vehicles")
+    print("   → May warrant further investigation into specific companies.")
+
+# Store for later
+NUM_REPEAT_OFFENDERS = num_repeat_offenders
+REPEAT_OFFENDER_CASES = cases_from_repeats
+AVG_VALUE_REPEAT = avg_value_repeats
+df_repeat_offenders = repeat_offenders.copy()
+```
+
+```markdown
+---
+
+## Phase 2: Coverage Gap Analysis {#phase2}
+
+---
+
+### Step 2.1: Map State Coverage
+
+**What you're doing:** Determining which states have lien verification tool coverage and which don't.
+
+**Data needed:**
+- List of states where verification tools (e.g., Tool A, Tool B) are active
+- State location for each lien loss case
+
+**Expected output:**
+- List of covered states
+- List of uncovered states  
+- Total states represented in dataset
+
+**Pro Tip:** Get this list from your titles/operations team. Don't assume—confirm with stakeholders.
+```
+
+```python
+# Cell 6: Define State Coverage
+
+# TODO: Update this list based on actual verification tool coverage
+# Get this from titles/operations team - DO NOT GUESS
+COVERED_STATES = [
+    'CA', 'NY', 'TX', 'FL', 'PA', 'OH', 'GA', 'NC', 'MI', 'NJ',
+    'VA', 'WA', 'AZ', 'MA', 'TN', 'IN', 'MO', 'MD', 'WI', 'CO',
+    'MN', 'SC', 'AL', 'LA', 'KY', 'OR', 'OK', 'CT', 'UT', 'IA',
+    'NV', 'AR', 'MS', 'KS', 'NM', 'NE', 'WV', 'ID', 'HI', 'NH',
+    'ME', 'MT', 'RI', 'DE', 'SD', 'ND', 'AK', 'VT', 'WY'
+]  # PLACEHOLDER - UPDATE WITH ACTUAL COVERED STATES
+
+# Get list of states in our dataset
+states_in_data = df_impound['state'].unique()
+
+# Identify uncovered states (states in data but not in covered list)
+uncovered_states_in_data = [s for s in states_in_data if s not in COVERED_STATES]
+
+# Display coverage summary
+print(f"{'='*60}")
+print(f"STATE COVERAGE MAPPING")
+print(f"{'='*60}")
+print(f"\nTotal States with Verification Tools: {len(COVERED_STATES)}")
+print(f"States Represented in Our Data: {len(states_in_data)}")
+print(f"Covered States in Our Data: {len([s for s in states_in_data if s in COVERED_STATES])}")
+print(f"Uncovered States in Our Data: {len(uncovered_states_in_data)}")
+
+if uncovered_states_in_data:
+    print(f"\n⚠️  UNCOVERED STATES WITH LOSSES:")
+    for state in sorted(uncovered_states_in_data):
+        count = len(df_impound[df_impound['state'] == state])
+        print(f"   {state}: {count} cases")
+else:
+    print(f"\n✓ All states in our data have verification coverage")
+
+print(f"\n⚠️  CRITICAL: Confirm this coverage list with titles team before proceeding!")
+```
+
+```markdown
+---
+
+### Step 2.2: Calculate Coverage Gap Metrics
+
+**What you're doing:** Breaking down total cases into "Covered States" vs "Uncovered States" buckets.
+
+**Expected output:**
+- Cases in covered states: [N] ([X%])
+- Cases in uncovered states: [M] ([Y%])
+- Verification: N + M = Total Cases ✓
+
+**Why this matters:** The uncovered percentage is your "controllable gap"—losses that could potentially be prevented with tool expansion.
+
+**Key principle (MECE):** Every case should fit into EXACTLY one bucket, and buckets should sum to 100%.
+```
+
+```python
+# Cell 7: Calculate Coverage Gap
+
+# Tag each case as covered or uncovered
+df_impound['coverage_status'] = df_impound['state'].apply(
+    lambda x: 'Covered' if x in COVERED_STATES else 'Uncovered'
+)
+
+# Calculate metrics
+covered_cases = len(df_impound[df_impound['coverage_status'] == 'Covered'])
+uncovered_cases = len(df_impound[df_impound['coverage_status'] == 'Uncovered'])
+covered_pct = (covered_cases / TOTAL_CASES) * 100
+uncovered_pct = (uncovered_cases / TOTAL_CASES) * 100
+
+# Validate MECE principle
+assert covered_cases + uncovered_cases == TOTAL_CASES, "❌ ERROR: Cases don't add up to total!"
+
+# Display results
+print(f"{'='*60}")
+print(f"COVERAGE GAP ANALYSIS")
+print(f"{'='*60}")
+print(f"\nTotal Cases: {TOTAL_CASES:,}")
+print(f"\nCovered States:")
+print(f"  Cases: {covered_cases:,}")
+print(f"  Percentage: {covered_pct:.1f}%")
+print(f"\nUncovered States:")
+print(f"  Cases: {uncovered_cases:,}")
+print(f"  Percentage: {uncovered_pct:.1f}%")
+print(f"\n✓ Validation: {covered_cases:,} + {uncovered_cases:,} = {TOTAL_CASES:,} ✓")
+print(f"\n{'='*60}")
+print(f"INTERPRETATION:")
+print(f"{'='*60}")
+
+if uncovered_pct > 20:
+    print(f"⚠️  SIGNIFICANT GAP: {uncovered_pct:.0f}% of losses occur in uncovered states")
+    print(f"   → This represents ~{uncovered_cases:,} cases annually")
+    print(f"   → Opportunity: Expanding tools could prevent substantial losses")
+elif uncovered_pct > 10:
+    print(f"⚠️  MODERATE GAP: {uncovered_pct:.0f}% of losses occur in uncovered states")
+    print(f"   → Worth investigating expansion feasibility")
+else:
+    print(f"✓ SMALL GAP: Only {uncovered_pct:.0f}% of losses occur in uncovered states")
+    print(f"   → Coverage is relatively comprehensive")
+
+# Store for later
+COVERED_CASES = covered_cases
+UNCOVERED_CASES = uncovered_cases
+COVERAGE_PCT = covered_pct
+COVERAGE_GAP_PCT = uncovered_pct
+```
+
+```markdown
+---
+
+### Step 2.3: Analyze Verification Process Performance
+
+**What you're doing:** For states WITH coverage, analyzing how well the verification process works.
+
+**Key metrics:**
+- Verification rate: % of eligible cases that went through verification
+- Match success rate: % of verified cases where lien was found
+- No-match (slippage) rate: % where verification failed to find lien
+
+**Expected output:**
+- Verification rate: [X%] (target: 100%)
+- Match success rate: [Y%] (target: 95%+)
+- No-match rate: [Z%] (minimize this)
+
+**Why this matters:** Even with coverage, if the process isn't followed or isn't effective, we still have exposure.
+```
+
+```python
+# Cell 8: Verification Process Performance
+
+# TODO: Adjust these column names based on your data schema
+# You need data on whether verification was performed and the result
+
+# For this example, let's assume you have these columns:
+# - 'verification_performed': Boolean (True/False)
+# - 'verification_result': ('Match', 'No Match', 'No Answer', etc.)
+
+# If you don't have this data, you'll need to:
+# 1. Join with verification tool logs/reports
+# 2. Or manually review a sample and extrapolate
+
+# Filter for covered cases only
+df_covered = df_impound[df_impound['coverage_status'] == 'Covered'].copy()
+
+# TODO: Update these calculations based on your actual data structure
+# PLACEHOLDER LOGIC - adjust based on your data:
+
+# Example: If you have verification data
+if 'verification_performed' in df_covered.columns:
+    verified_count = df_covered['verification_performed'].sum()
+    verification_rate = (verified_count / len(df_covered)) * 100
+    
+    # Of those verified, how many matched?
+    df_verified = df_covered[df_covered['verification_performed'] == True]
+    if 'verification_result' in df_verified.columns:
+        matched_count = len(df_verified[df_verified['verification_result'] == 'Match'])
+        no_match_count = len(df_verified[df_verified['verification_result'] == 'No Match'])
+        no_answer_count = len(df_verified[df_verified['verification_result'] == 'No Answer'])
+        
+        match_rate = (matched_count / verified_count) * 100
+        no_match_rate = (no_match_count / verified_count) * 100
+        no_answer_rate = (no_answer_count / verified_count) * 100
+    else:
+        # Placeholder if you don't have result data
+        match_rate = 95.0  # TODO: Get actual data
+        no_match_rate = 5.0
+        no_answer_rate = 0.0
+        matched_count = int(verified_count * 0.95)
+        no_match_count = int(verified_count * 0.05)
+        no_answer_count = 0
+else:
+    # PLACEHOLDER - if no verification data available
+    # You'll need to get this from titles team
+    print("⚠️  WARNING: No verification data found in dataset")
+    print("   Action needed: Obtain verification performance data from titles team\n")
+    verification_rate = 100.0  # Assume 100% for now
+    match_rate = 95.0
+    no_match_rate = 5.0
+    no_answer_rate = 0.0
+    verified_count = len(df_covered)
+    matched_count = int(verified_count * 0.95)
+    no_match_count = int(verified_count * 0.05)
+    no_answer_count = 0
+
+# Display results
+print(f"{'='*60}")
+print(f"VERIFICATION PROCESS PERFORMANCE")
+print(f"{'='*60}")
+print(f"\nEligible Cases (Covered States): {len(df_covered):,}")
+print(f"\n--- Process Adherence ---")
+print(f"Cases Verified: {verified_count:,}")
+print(f"Verification Rate: {verification_rate:.1f}%")
+
+if verification_rate >= 99:
+    print("✓ EXCELLENT: Near-perfect process adherence")
+elif verification_rate >= 90:
+    print("✓ GOOD: Strong process adherence")
+else:
+    print("⚠️  CONCERN: Process adherence below target")
+
+print(f"\n--- Verification Effectiveness ---")
+print(f"Match Success: {matched_count:,} ({match_rate:.1f}%)")
+print(f"No Match (Slippage): {no_match_count:,} ({no_match_rate:.1f}%)")
+print(f"No Answer/Other: {no_answer_count:,} ({no_answer_rate:.1f}%)")
+
+if no_match_rate <= 5:
+    print("\n✓ STRONG: Low slippage rate")
+elif no_match_rate <= 10:
+    print("\n⚠️  MODERATE: Some slippage detected - investigate root causes")
+else:
+    print("\n❌ HIGH: Significant slippage - immediate investigation needed")
+
+print(f"\n{'='*60}")
+print(f"KEY INSIGHT:")
+print(f"{'='*60}")
+print(f"Even with {coverage_pct:.0f}% state coverage, {no_match_rate:.0f}% slip through")
+print(f"This represents ~{no_match_count:,} cases where verification failed")
+print(f"Root cause analysis needed to understand why these {no_match_count:,} cases weren't prevented")
+
+# Store for later
+VERIFICATION_RATE = verification_rate
+MATCH_SUCCESS_RATE = match_rate
+SLIPPAGE_RATE = no_match_rate
+SLIPPAGE_CASES = no_match_count
+```
+
+```markdown
+---
+
+## Phase 3: Trend & Pattern Analysis {#phase3}
+
+---
+
+### Step 3.1: Monthly Loss Volume Trends
+
+**What you're doing:** Understanding if losses are stable, increasing, or seasonal.
+
+**Expected output:**
+- Average monthly loss rate: [X-Y] cases/month
+- Trend direction: Stable / Increasing / Decreasing
+- Monthly breakdown with visualization
+- Any unusual spikes identified
+
+**Why this matters:** 
+- Establishes baseline "normal" loss rate
+- Identifies if situation is worsening
+- Helps with forecasting and budgeting
+```
+
+```python
+# Cell 9: Monthly Trend Analysis
+
+# Extract month and year from loss date
+df_impound['loss_month'] = df_impound['loss_date'].dt.to_period('M')
+
+# Count cases per month
+monthly_counts = df_impound.groupby('loss_month').size().reset_index(name='case_count')
+monthly_counts['loss_month'] = monthly_counts['loss_month'].astype(str)
+
+# Calculate statistics
+avg_monthly = monthly_counts['case_count'].mean()
+std_monthly = monthly_counts['case_count'].std()
+min_monthly = monthly_counts['case_count'].min()
+max_monthly = monthly_counts['case_count'].max()
+
+# Display summary
+print(f"{'='*60}")
+print(f"MONTHLY LOSS VOLUME ANALYSIS")
+print(f"{'='*60}")
+print(f"\nAnalysis Period: {monthly_counts['loss_month'].iloc[0]} to {monthly_counts['loss_month'].iloc[-1]}")
+print(f"Total Months: {len(monthly_counts)}")
+print(f"\nAverage Monthly Losses: {avg_monthly:.1f} cases/month")
+print(f"Standard Deviation: {std_monthly:.1f}")
+print(f"Range: {min_monthly} to {max_monthly} cases/month")
+print(f"\nAnnualized Run Rate: {avg_monthly * 12:.0f} cases/year")
+
+# Identify trend
+first_half_avg = monthly_counts['case_count'].iloc[:len(monthly_counts)//2].mean()
+second_half_avg = monthly_counts['case_count'].iloc[len(monthly_counts)//2:].mean()
+trend_change = ((second_half_avg - first_half_avg) / first_half_avg) * 100
+
+print(f"\n{'='*60}")
+print(f"TREND ANALYSIS:")
+print(f"{'='*60}")
+print(f"First Half Avg: {first_half_avg:.1f} cases/month")
+print(f"Second Half Avg: {second_half_avg:.1f} cases/month")
+print(f"Change: {trend_change:+.1f}%")
+
+if abs(trend_change) < 10:
+    print("\n✓ STABLE: Loss volume is relatively consistent")
+    trend_status = "Stable"
+elif trend_change > 10:
+    print("\n⚠️  INCREASING: Losses are trending upward - investigate causes")
+    trend_status = "Increasing"
+else:
+    print("\n✓ DECREASING: Losses are trending downward")
+    trend_status = "Decreasing"
+
+# Identify outlier months (>1.5 std from mean)
+monthly_counts['z_score'] = (monthly_counts['case_count'] - avg_monthly) / std_monthly
+outliers = monthly_counts[abs(monthly_counts['z_score']) > 1.5]
+
+if len(outliers) > 0:
+    print(f"\n⚠️  OUTLIER MONTHS DETECTED:")
+    for _, row in outliers.iterrows():
+        print(f"   {row['loss_month']}: {row['case_count']} cases (z-score: {row['z_score']:.2f})")
+else:
+    print(f"\n✓ No unusual spikes detected")
+
+print(f"\n{'='*60}")
+print(f"MONTHLY BREAKDOWN:")
+print(f"{'='*60}")
+print(monthly_counts[['loss_month', 'case_count']].to_string(index=False))
+
+# Visualization
+plt.figure(figsize=(12, 6))
+plt.plot(monthly_counts['loss_month'], monthly_counts['case_count'], marker='o', linewidth=2, markersize=8)
+plt.axhline(y=avg_monthly, color='r', linestyle='--', label=f'Average ({avg_monthly:.1f})')
+plt.axhline(y=avg_monthly + std_monthly, color='orange', linestyle=':', alpha=0.7, label='+1 Std Dev')
+plt.axhline(y=avg_monthly - std_monthly, color='orange', linestyle=':', alpha=0.7, label='-1 Std Dev')
+plt.xlabel('Month', fontsize=12)
+plt.ylabel('Number of Cases', fontsize=12)
+plt.title('Monthly Lien Loss Volume Trend', fontsize=14, fontweight='bold')
+plt.xticks(rotation=45)
+plt.legend()
+plt.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.show()
+
+# Store for later
+AVG_MONTHLY_RATE = avg_monthly
+TREND_STATUS = trend_status
+```
+
+```markdown
+---
+
+### Step 3.2: Repeat Offender Geographic & Coverage Analysis
+
+**What you're doing:** Understanding if repeat offenders are concentrated in covered or uncovered states.
+
+**Expected output:**
+- Of [X] repeat offender cases:
+  - [Y] in covered states ([Z%])
+  - [W] in uncovered states ([V%])
+- Geographic concentration patterns
+
+**Why this matters:** Helps determine if repeat offenders are a coverage issue or process issue.
+```
+
+```python
+# Cell 10: Repeat Offender Coverage Analysis
+
+# Get list of repeat offender companies
+repeat_offender_companies = df_repeat_offenders.index.tolist()
+
+# Filter main dataset for repeat offender cases
+df_repeat_cases = df_impound[df_impound[company_column].isin(repeat_offender_companies)].copy()
+
+# Break down by coverage
+repeat_covered = len(df_repeat_cases[df_repeat_cases['coverage_status'] == 'Covered'])
+repeat_uncovered = len(df_repeat_cases[df_repeat_cases['coverage_status'] == 'Uncovered'])
+repeat_covered_pct = (repeat_covered / len(df_repeat_cases)) * 100
+repeat_uncovered_pct = (repeat_uncovered / len(df_repeat_cases)) * 100
+
+# Display results
+print(f"{'='*60}")
+print(f"REPEAT OFFENDER COVERAGE BREAKDOWN")
+print(f"{'='*60}")
+print(f"\nTotal Repeat Offender Cases: {len(df_repeat_cases):,}")
+print(f"\nCovered States:")
+print(f"  Cases: {repeat_covered:,} ({repeat_covered_pct:.1f}%)")
+print(f"\nUncovered States:")
+print(f"  Cases: {repeat_uncovered:,} ({repeat_uncovered_pct:.1f}%)")
+
+print(f"\n{'='*60}")
+print(f"COMPARISON TO OVERALL POPULATION:")
+print(f"{'='*60}")
+print(f"Overall Coverage Rate: {COVERAGE_PCT:.1f}%")
+print(f"Repeat Offender Coverage Rate: {repeat_covered_pct:.1f}%")
+print(f"Difference: {repeat_covered_pct - COVERAGE_PCT:+.1f} percentage points")
+
+if abs(repeat_covered_pct - COVERAGE_PCT) < 5:
+    print("\n✓ SIMILAR: Repeat offenders follow overall coverage distribution")
+    print("   → Not a coverage-specific issue")
+elif repeat_uncovered_pct > COVERAGE_GAP_PCT:
+    print("\n⚠️  SKEWED: Repeat offenders over-represented in uncovered states")
+    print("   → Coverage expansion could significantly reduce repeat offenses")
+else:
+    print("\n⚠️  SKEWED: Repeat offenders over-represented in covered states")
+    print("   → This is a process issue, not a coverage issue")
+
+# Geographic concentration
+print(f"\n{'='*60}")
+print(f"TOP STATES FOR REPEAT OFFENDER LOSSES:")
+print(f"{'='*60}")
+state_breakdown = df_repeat_cases.groupby('state').size().sort_values(ascending=False).head(10)
+for state, count in state_breakdown.items():
+    coverage = "✓ Covered" if state in COVERED_STATES else "✗ Uncovered"
+    pct = (count / len(df_repeat_cases)) * 100
+    print(f"{state}: {count:,} cases ({pct:.1f}%) - {coverage}")
+
+# Detailed breakdown by company and state
+print(f"\n{'='*60}")
+print(f"REPEAT OFFENDERS: COMPANY-STATE MATRIX")
+print(f"{'='*60}")
+company_state = df_repeat_cases.groupby([company_column, 'state']).size().unstack(fill_value=0)
+print(company_state.to_string())
+```
+
+```markdown
+---
+
+## Phase 4: Synthesis & Quantification {#phase4}
+
+---
+
+### Step 4.1: Calculate Financial Exposure
+
+**What you're doing:** Quantifying total dollar exposure and breaking it down by key segments.
+
+**Expected output:**
+- Total annual exposure: $[X]M
+- Covered state exposure: $[Y]M
+- Uncovered state exposure (controllable gap): $[Z]M
+- Repeat offender exposure: $[W]M
+
+**Why this matters:** Translates case counts into business impact. Helps prioritize where to focus remediation efforts.
+```
+
+```python
+# Cell 11: Financial Exposure Calculation
+
+# Total exposure
+total_value = df_impound['vehicle_value'].sum()
+avg_value_all = df_impound['vehicle_value'].mean()
+
+# Covered vs Uncovered exposure
+covered_value = df_impound[df_impound['coverage_status'] == 'Covered']['vehicle_value'].sum()
+uncovered_value = df_impound[df_impound['coverage_status'] == 'Uncovered']['vehicle_value'].sum()
+
+# Repeat offender exposure
+repeat_offender_value = df_repeat_cases['vehicle_value'].sum()
+
+# Annualized figures
+annual_case_rate = AVG_MONTHLY_RATE * 12
+annual_exposure = avg_value_all * annual_case_rate
+
+# Display results
+print(f"{'='*60}")
+print(f"FINANCIAL EXPOSURE ANALYSIS")
+print(f"{'='*60}")
+print(f"\n--- Current Period ({len(df_impound):,} cases) ---")
+print(f"Total Exposure: ${total_value:,.0f} (${total_value/1_000_000:.1f}M)")
+print(f"Average per Case: ${avg_value_all:,.0f}")
+
+print(f"\n--- Breakdown by Coverage ---")
+print(f"Covered States: ${covered_value:,.0f} (${covered_value/1_000_000:.1f}M)")
+print(f"  → {COVERED_CASES:,} cases × ${df_impound[df_impound['coverage_status'] == 'Covered']['vehicle_value'].mean():,.0f} avg")
+print(f"\nUncovered States: ${uncovered_value:,.0f} (${uncovered_value/1_000_000:.1f}M)")
+print(f"  → {UNCOVERED_CASES:,} cases × ${df_impound[df_impound['coverage_status'] == 'Uncovered']['vehicle_value'].mean():,.0f} avg")
+
+print(f"\n--- Repeat Offender Exposure ---")
+print(f"Total from Repeat Offenders: ${repeat_offender_value:,.0f} (${repeat_offender_value/1_000_000:.1f}M)")
+print(f"Percentage of Total: {(repeat_offender_value/total_value)*100:.1f}%")
+
+print(f"\n--- Annualized Projection ---")
+print(f"Projected Annual Cases: {annual_case_rate:.0f}")
+print(f"Projected Annual Exposure: ${annual_exposure:,.0f} (${annual_exposure/1_000_000:.1f}M)")
+
+print(f"\n{'='*60}")
+print(f"KEY INSIGHTS:")
+print(f"{'='*60}")
+print(f"1. Controllable Gap (Uncovered States):")
+print(f"   Current: ${uncovered_value/1_000_000:.1f}M ({COVERAGE_GAP_PCT:.0f}% of total)")
+print(f"   Annual: ~${(uncovered_value/len(df_impound)) * annual_case_rate/1_000_000:.1f}M")
+print(f"   → Potential savings from coverage expansion\n")
+
+print(f"2. Repeat Offenders:")
+print(f"   ${repeat_offender_value/1_000_000:.1f}M from {NUM_REPEAT_OFFENDERS} companies")
+print(f"   → Targeted outreach could reduce {(repeat_offender_value/total_value)*100:.0f}% of losses\n")
+
+print(f"3. Process Slippage:")
+print(f"   {SLIPPAGE_CASES} cases slip through despite verification")
+print(f"   ~${(SLIPPAGE_CASES * avg_value_all)/1_000_000:.1f}M in annual exposure")
+print(f"   → RCA needed to eliminate this leakage")
+
+# Store for later
+TOTAL_EXPOSURE = total_value
+UNCOVERED_EXPOSURE = uncovered_value
+ANNUAL_EXPOSURE = annual_exposure
+```
+
+```markdown
+---
+
+### Step 4.2: Final Fraud Assessment
+
+**What you're doing:** Synthesizing all evidence to make a definitive fraud risk determination.
+
+**Checklist:**
+- [ ] Vehicle values compared (repeat offenders vs benchmark)
+- [ ] Geographic patterns analyzed
+- [ ] Company profiles reviewed
+- [ ] Process adherence checked
+
+**Expected output:**
+- Fraud Risk Level: LOW / MEDIUM / HIGH
+- Supporting evidence summarized
+- Clear yes/no answer to "Is there systematic targeting?"
+```
+
+```python
+# Cell 12: Comprehensive Fraud Assessment
+
+print(f"{'='*60}")
+print(f"FRAUD RISK ASSESSMENT - FINAL DETERMINATION")
+print(f"{'='*60}")
+
+# Evidence 1: Value comparison
+value_diff = ((AVG_VALUE_REPEAT - BENCHMARK_VALUE) / BENCHMARK_VALUE) * 100
+
+print(f"\n--- Evidence 1: Vehicle Value Analysis ---")
+print(f"Repeat Offender Avg Value: ${AVG_VALUE_REPEAT:,.0f}")
+print(f"Portfolio Benchmark: ${BENCHMARK_VALUE:,.0f}")
+print(f"Difference: {value_diff:+.1f}%")
+
+if value_diff < -10:
+    print("✓ Repeat offenders target LOWER value vehicles")
+    print("  Conclusion: Rules out targeting of high-value assets")
+    fraud_signal_1 = "NO FRAUD"
+elif value_diff > 15:
+    print("⚠️  Repeat offenders target HIGHER value vehicles")
+    print("  Conclusion: Potential fraud signal - investigate further")
+    fraud_signal_1 = "POSSIBLE FRAUD"
+else:
+    print("✓ Similar value distribution")
+    print("  Conclusion: No clear targeting pattern")
+    fraud_signal_1 = "NO FRAUD"
+
+# Evidence 2: Repeat offender concentration
+repeat_offender_pct = (REPEAT_OFFENDER_CASES / TOTAL_CASES) * 100
+
+print(f"\n--- Evidence 2: Repeat Offender Concentration ---")
+print(f"Repeat Offender Cases: {REPEAT_OFFENDER_CASES:,} ({repeat_offender_pct:.1f}%)")
+print(f"Number of Repeat Offenders: {NUM_REPEAT_OFFENDERS}")
+
+if repeat_offender_pct < 10 and NUM_REPEAT_OFFENDERS < 10:
+    print("✓ Low concentration - consistent with random distribution")
+    fraud_signal_2 = "NO FRAUD"
+elif repeat_offender_pct > 25:
+    print("⚠️  High concentration in few companies - investigate")
+    fraud_signal_2 = "POSSIBLE FRAUD"
+else:
+    print("✓ Moderate concentration - likely high-volume operators")
+    fraud_signal_2 = "NO FRAUD"
+
+# Evidence 3: Coverage distribution
+print(f"\n--- Evidence 3: Coverage Distribution ---")
+print(f"Repeat Offenders in Covered States: {repeat_covered_pct:.1f}%")
+print(f"Overall Coverage Rate: {COVERAGE_PCT:.1f}%")
+
+if abs(repeat_covered_pct - COVERAGE_PCT) < 10:
+    print("✓ Similar distribution - no targeting of coverage gaps")
+    fraud_signal_3 = "NO FRAUD"
+else:
+    print("⚠️  Different distribution - review for patterns")
+    fraud_signal_3 = "INVESTIGATE"
+
+# Evidence 4: Process adherence
+print(f"\n--- Evidence 4: Process Adherence ---")
+print(f"Verification Rate: {VERIFICATION_RATE:.1f}%")
+print(f"Match Success Rate: {MATCH_SUCCESS_RATE:.1f}%")
+
+if VERIFICATION_RATE >= 95 and MATCH_SUCCESS_RATE >= 90:
+    print("✓ Strong process compliance - controls are working")
+    fraud_signal_4 = "CONTROLS WORKING"
+else:
+    print("⚠️  Process gaps detected - may enable fraud")
+    fraud_signal_4 = "PROCESS GAPS"
+
+# Final determination
+print(f"\n{'='*80}")
+print(f"FINAL FRAUD RISK DETERMINATION")
+print(f"{'='*80}")
+
+fraud_signals = [fraud_signal_1, fraud_signal_2, fraud_signal_3, fraud_signal_4]
+fraud_count = sum(1 for signal in fraud_signals if "FRAUD" in signal and "NO" not in signal)
+
+if fraud_count == 0:
+    final_fraud_risk = "LOW"
+    final_conclusion = "NO EVIDENCE OF SYSTEMATIC FRAUD DETECTED"
+    recommendation = "Focus on operational improvements and coverage expansion"
+elif fraud_count <= 2:
+    final_fraud_risk = "MEDIUM"
+    final_conclusion = "SOME SIGNALS WARRANT FURTHER INVESTIGATION"
+    recommendation = "Conduct targeted investigation into flagged areas"
+else:
+    final_fraud_risk = "HIGH"
+    final_conclusion = "MULTIPLE FRAUD SIGNALS DETECTED"
+    recommendation = "Immediate investigation required - involve legal/compliance"
+
+print(f"\n🎯 FRAUD RISK LEVEL: {final_fraud_risk}")
+print(f"\n📊 CONCLUSION: {final_conclusion}")
+print(f"\n💡 RECOMMENDATION: {recommendation}")
+
+print(f"\n{'='*80}")
+print(f"SUPPORTING EVIDENCE SUMMARY:")
+print(f"{'='*80}")
+print(f"✓ Vehicle Values: {fraud_signal_1}")
+print(f"✓ Concentration: {fraud_signal_2}")
+print(f"✓ Coverage Pattern: {fraud_signal_3}")
+print(f"✓ Process Controls: {fraud_signal_4}")
+
+# Store final assessment
+FINAL_FRAUD_RISK = final_fraud_risk
+FRAUD_CONCLUSION = final_conclusion
+```
+
+```markdown
+---
+
+## Phase 5: Visualization & Insights {#phase5}
+
+---
+
+### Step 5.1: Create Executive Summary Visualizations
+
+**What you're doing:** Building the key charts for your presentation deck.
+
+**Charts to create:**
+1. Value Comparison (Bar Chart): Benchmark vs Impound vs Repeat Offenders
+2. Coverage Split (Pie Chart): Covered vs Uncovered states
+3. Monthly Trend (Line Chart): Loss volume over time
+4. Repeat Offender Breakdown (Horizontal Bar): Top companies by loss count
+
+**Expected output:** 4 publication-ready visualizations with insights
+```
+
+```python
+# Cell 13: Create Executive Summary Visualizations
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Set up the plotting area
+fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+fig.suptitle('Impound Lien Loss Analysis - Executive Summary', fontsize=20, fontweight='bold', y=0.995)
+
+# Chart 1: Vehicle Value Comparison (Top Left)
+ax1 = axes[0, 0]
+categories = ['Portfolio\nBenchmark', 'All Impound\nLosses', 'Repeat\nOffenders']
+values = [BENCHMARK_VALUE, AVG_IMPOUND_VALUE, AVG_VALUE_REPEAT]
+colors = ['#3498db', '#9b59b6', '#e74c3c' if AVG_VALUE_REPEAT > BENCHMARK_VALUE else '#2ecc71']
+
+bars = ax1.bar(categories, values, color=colors, alpha=0.7, edgecolor='black', linewidth=2)
+ax1.set_ylabel('Average Vehicle Value ($)', fontsize=12, fontweight='bold')
+ax1.set_title('Vehicle Value Comparison\n(No Evidence of Targeting)', fontsize=14, fontweight='bold')
+ax1.axhline(y=BENCHMARK_VALUE, color='red', linestyle='--', alpha=0.5, label='Benchmark')
+
+# Add value labels on bars
+for bar in bars:
+    height = bar.get_height()
+    ax1.text(bar.get_x() + bar.get_width()/2., height,
+             f'${height:,.0f}',
+             ha='center', va='bottom', fontsize=11, fontweight='bold')
+
+# Add percentage difference annotation
+diff_pct = ((AVG_VALUE_REPEAT - BENCHMARK_VALUE) / BENCHMARK_VALUE) * 100
+ax1.text(0.5, 0.95, f'Repeat Offenders: {diff_pct:+.0f}% vs Benchmark',
+         transform=ax1.transAxes, ha='center', va='top',
+         bbox=dict(boxstyle='round', facecolor='yellow' if diff_pct > 0 else 'lightgreen', alpha=0.7),
+         fontsize=10, fontweight='bold')
+
+ax1.grid(axis='y', alpha=0.3)
+
+# Chart 2: Coverage Gap (Top Right)
+ax2 = axes[0, 1]
+sizes = [COVERAGE_PCT, COVERAGE_GAP_PCT]
+labels = [f'Covered States\n{COVERED_CASES:,} cases\n({COVERAGE_PCT:.0f}%)',
+          f'Uncovered States\n{UNCOVERED_CASES:,} cases\n({COVERAGE_GAP_PCT:.0f}%)']
+colors_pie = ['#2ecc71', '#e74c3c']
+explode = (0, 0.1)  # Explode the uncovered slice
+
+wedges, texts, autotexts = ax2.pie(sizes, explode=explode, labels=labels, colors=colors_pie,
+                                     autopct='%1.0f%%', startangle=90, textprops={'fontsize': 11})
+for autotext in autotexts:
+    autotext.set_color('white')
+    autotext.set_fontweight('bold')
+    autotext.set_fontsize(13)
+
+ax2.set_title(f'Verification Coverage Gap\n({UNCOVERED_CASES:,} cases in uncovered states)', 
+              fontsize=14, fontweight='bold')
+
+# Chart 3: Monthly Trend (Bottom Left)
+ax3 = axes[1, 0]
+monthly_data = df_impound.groupby('loss_month').size().reset_index(name='count')
+monthly_data['month_str'] = monthly_data['loss_month'].astype(str)
+
+ax3.plot(range(len(monthly_data)), monthly_data['count'], marker='o', linewidth=2.5, 
+         markersize=8, color='#3498db', label='Monthly Losses')
+ax3.axhline(y=AVG_MONTHLY_RATE, color='red', linestyle='--', linewidth=2, 
+            label=f'Average ({AVG_MONTHLY_RATE:.0f})')
+ax3.fill_between(range(len(monthly_data)), 
+                  AVG_MONTHLY_RATE - std_monthly, 
+                  AVG_MONTHLY_RATE + std_monthly, 
+                  alpha=0.2, color='gray', label='±1 Std Dev')
+
+ax3.set_xlabel('Month', fontsize=12, fontweight='bold')
+ax3.set_ylabel('Number of Cases', fontsize=12, fontweight='bold')
+ax3.set_title(f'Monthly Loss Trend - {TREND_STATUS}\n(Avg: {AVG_MONTHLY_RATE:.0f} cases/month)', 
+              fontsize=14, fontweight='bold')
+ax3.set_xticks(range(len(monthly_data)))
+ax3.set_xticklabels([m.split('-')[1] for m in monthly_data['month_str']], rotation=45)
+ax3.legend(loc='upper right')
+ax3.grid(True, alpha=0.3)
+
+# Chart 4: Repeat Offenders (Bottom Right)
+ax4 = axes[1, 1]
+top_offenders = df_repeat_offenders.head(7).sort_values('loss_count')
+
+# Anonymize company names for display (or use actual names if appropriate)
+company_labels = [f"Company {chr(65+i)}" for i in range(len(top_offenders))]  # A, B, C, etc.
+# OR use actual names: company_labels = top_offenders.index.tolist()
+
+bars = ax4.barh(company_labels, top_offenders['loss_count'], color='#e74c3c', alpha=0.7, edgecolor='black')
+ax4.set_xlabel('Number of Loss Cases', fontsize=12, fontweight='bold')
+ax4.set_title(f'Top Repeat Offenders (3+ Losses)\n{NUM_REPEAT_OFFENDERS} companies, {REPEAT_OFFENDER_CASES:,} total cases', 
+              fontsize=14, fontweight='bold')
+
+# Add value labels
+for i, (bar, count) in enumerate(zip(bars, top_offenders['loss_count'])):
+    ax4.text(count + 0.1, i, f'{count}', va='center', fontsize=10, fontweight='bold')
+
+ax4.grid(axis='x', alpha=0.3)
+
+plt.tight_layout()
+plt.show()
+
+print(f"\n✓ Visualizations created successfully")
+print(f"\nThese charts are ready for your executive deck:")
+print(f"  1. Vehicle Value Comparison - Shows no targeting")
+print(f"  2. Coverage Gap - Highlights {COVERAGE_GAP_PCT:.0f}% opportunity")
+print(f"  3. Monthly Trend - Shows {TREND_STATUS.lower()} pattern")
+print(f"  4. Repeat Offenders - Identifies key companies")
+```
+
+```markdown
+---
+
+### Step 5.2: Create Detailed Analysis Visualizations
+
+**What you're doing:** Building supporting charts for deep-dive analysis section.
+
+**Charts to create:**
+1. Verification Funnel: Total → Eligible → Verified → Matched → Slipped
+2. State-Level Heatmap: Cases by state with coverage indication
+3. Value Distribution: Histogram showing vehicle value spread
+
+**Expected output:** 3 additional detailed visualizations
+```
+
+```python
+# Cell 14: Create Detailed Analysis Visualizations
+
+fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+fig.suptitle('Detailed Analysis - Process Performance & Distribution', fontsize=18, fontweight='bold')
+
+# Chart 1: Verification Funnel (Left)
+ax1 = axes[0]
+funnel_stages = ['Total\nCases', 'Eligible\n(Covered)', 'Verified', 'Matched', 'Slipped\nThrough']
+funnel_values = [
+    TOTAL_CASES,
+    COVERED_CASES,
+    int(COVERED_CASES * (VERIFICATION_RATE/100)),
+    int(COVERED_CASES * (VERIFICATION_RATE/100) * (MATCH_SUCCESS_RATE/100)),
+    SLIPPAGE_CASES
+]
+funnel_colors = ['#3498db', '#3498db', '#2ecc71', '#2ecc71', '#e74c3c']
+
+# Create funnel effect
+y_pos = np.arange(len(funnel_stages))
+bars = ax1.barh(y_pos, funnel_values, color=funnel_colors, alpha=0.7, edgecolor='black', linewidth=2)
+
+# Add value labels
+for i, (bar, value) in enumerate(zip(bars, funnel_values)):
+    pct = (value / TOTAL_CASES) * 100
+    ax1.text(value + max(funnel_values)*0.02, i, f'{value:,}\n({pct:.0f}%)', 
+             va='center', fontsize=10, fontweight='bold')
+
+ax1.set_yticks(y_pos)
+ax1.set_yticklabels(funnel_stages, fontsize=11)
+ax1.set_xlabel('Number of Cases', fontsize=12, fontweight='bold')
+ax1.set_title(f'Verification Process Funnel\n({SLIPPAGE_RATE:.0f}% slippage rate)', 
+              fontsize=13, fontweight='bold')
+ax1.grid(axis='x', alpha=0.3)
+ax1.invert_yaxis()
+
+# Chart 2: State-Level Breakdown (Middle)
+ax2 = axes[1]
+state_counts = df_impound.groupby('state').size().sort_values(ascending=False).head(15)
+state_colors = ['#2ecc71' if state in COVERED_STATES else '#e74c3c' for state in state_counts.index]
+
+bars = ax2.bar(range(len(state_counts)), state_counts.values, color=state_colors, alpha=0.7, edgecolor='black')
+ax2.set_xticks(range(len(state_counts)))
+ax2.set_xticklabels(state_counts.index, rotation=45, ha='right')
+ax2.set_ylabel('Number of Cases', fontsize=12, fontweight='bold')
+ax2.set_title(f'Top 15 States by Loss Count\n(Green=Covered, Red=Uncovered)', 
+              fontsize=13, fontweight='bold')
+ax2.grid(axis='y', alpha=0.3)
+
+# Add value labels on bars
+for bar, value in zip(bars, state_counts.values):
+    height = bar.get_height()
+    ax2.text(bar.get_x() + bar.get_width()/2., height,
+             f'{int(value)}', ha='center', va='bottom', fontsize=9, fontweight='bold')
+
+# Chart 3: Vehicle Value Distribution (Right)
+ax3 = axes[2]
+ax3.hist(df_impound['vehicle_value'], bins=30, color='#9b59b6', alpha=0.7, edgecolor='black')
+ax3.axvline(x=AVG_IMPOUND_VALUE, color='red', linestyle='--', linewidth=2, 
+            label=f'Mean: ${AVG_IMPOUND_VALUE:,.0f}')
+ax3.axvline(x=np.median(df_impound['vehicle_value']), color='green', linestyle='--', linewidth=2,
+            label=f'Median: ${np.median(df_impound["vehicle_value"]):,.0f}')
+ax3.axvline(x=BENCHMARK_VALUE, color='orange', linestyle='--', linewidth=2,
+            label=f'Benchmark: ${BENCHMARK_VALUE:,.0f}')
+
+ax3.set_xlabel('Vehicle Value ($)', fontsize=12, fontweight='bold')
+ax3.set_ylabel('Frequency', fontsize=12, fontweight='bold')
+ax3.set_title('Vehicle Value Distribution\n(All Impound Losses)', fontsize=13, fontweight='bold')
+ax3.legend(loc='upper right')
+ax3.grid(axis='y', alpha=0.3)
+
+plt.tight_layout()
+plt.show()
+
+print(f"\n✓ Detailed visualizations created successfully")
+```
+
+```markdown
+---
+
+## Phase 6: Recommendations & Output {#phase6}
+
+---
+
+### Step 6.1: Prioritize Recommendations Using Impact-Effort Matrix
+
+**What you're doing:** Ranking potential actions by ROI to help leadership decide where to invest.
+
+**Framework:**
+- HIGH Impact + LOW Effort = Priority 1 (Do first)
+- HIGH Impact + HIGH Effort = Priority 2 (Plan carefully)
+- LOW Impact + LOW Effort = Priority 3 (Quick wins)
+- LOW Impact + HIGH Effort = Deprioritize
+
+**Expected output:** 
+- 3-5 prioritized recommendations
+- Each with estimated impact ($), effort (time), and timeline
+```
+
+```python
+# Cell 15: Build Recommendation Matrix
+
+# Define potential recommendations
+recommendations = {
+    'Expand Coverage to Uncovered States': {
+        'impact_cases': UNCOVERED_CASES,
+        'impact_dollars': UNCOVERED_EXPOSURE,
+        'effort_months': 6,
+        'effort_level': 'Medium',
+        'description': f'Add verification tools to {len(uncovered_states_in_data)} uncovered states',
+        'priority': None
+    },
+    'Root Cause Analysis of No-Match Cases': {
+        'impact_cases': SLIPPAGE_CASES,
+        'impact_dollars': SLIPPAGE_CASES * AVG_IMPOUND_VALUE,
+        'effort_months': 0.5,
+        'effort_level': 'Low',
+        'description': 'Investigate why verified cases still slip through',
+        'priority': None
+    },
+    'Establish Repeat Offender Relationships': {
+        'impact_cases': int(REPEAT_OFFENDER_CASES * 0.3),  # Assume 30% reduction possible
+        'impact_dollars': repeat_offender_value * 0.3,
+        'effort_months': 2,
+        'effort_level': 'Low',
+        'description': f'Direct outreach to {NUM_REPEAT_OFFENDERS} high-volume companies',
+        'priority': None
+    },
+    'Automated Fraud Detection System': {
+        'impact_cases': 0,  # No fraud detected
+        'impact_dollars': 0,
+        'effort_months': 12,
+        'effort_level': 'High',
+        'description': 'Build ML model to detect targeting patterns',
+        'priority': None
+    },
+    'Process Training & Compliance': {
+        'impact_cases': int((100 - VERIFICATION_RATE) / 100 * COVERED_CASES),
+        'impact_dollars': int((100 - VERIFICATION_RATE) / 100 * COVERED_CASES * AVG_IMPOUND_VALUE),
+        'effort_months': 1,
+        'effort_level': 'Low',
+        'description': 'Improve verification rate from current to 100%',
+        'priority': None
+    }
+}
+
+# Calculate impact scores (normalized)
+max_impact = max(rec['impact_dollars'] for rec in recommendations.values())
+
+for rec_name, rec_data in recommendations.items():
+    impact_score = (rec_data['impact_dollars'] / max_impact) * 100 if max_impact > 0 else 0
+    
+    # Assign priority based on impact-effort matrix
+    if impact_score >= 50 and rec_data['effort_level'] in ['Low', 'Medium']:
+        rec_data['priority'] = 1
+    elif impact_score >= 50 and rec_data['effort_level'] == 'High':
+        rec_data['priority'] = 2
+    elif impact_score < 50 and rec_data['effort_level'] == 'Low':
+        rec_data['priority'] = 3
+    else:
+        rec_data['priority'] = 4  # Deprioritize
+    
+    rec_data['impact_score'] = impact_score
+
+# Sort by priority
+sorted_recs = sorted(recommendations.items(), key=lambda x: (x[1]['priority'], -x[1]['impact_score']))
+
+# Display prioritized recommendations
+print(f"{'='*80}")
+print(f"PRIORITIZED RECOMMENDATIONS - IMPACT-EFFORT MATRIX")
+print(f"{'='*80}\n")
+
+priority_labels = {1: "🎯 PRIORITY 1 (Do First)", 2: "📋 PRIORITY 2 (Plan Carefully)", 
+                   3: "⚡ PRIORITY 3 (Quick Wins)", 4: "⏸️  DEPRIORITIZE"}
+
+current_priority = None
+for rec_name, rec_data in sorted_recs:
+    if rec_data['priority'] != current_priority:
+        current_priority = rec_data['priority']
+        print(f"\n{'='*80}")
+        print(f"{priority_labels[current_priority]}")
+        print(f"{'='*80}\n")
+    
+    print(f"📌 {rec_name}")
+    print(f"   Description: {rec_data['description']}")
+    print(f"   Impact: {rec_data['impact_cases']:,} cases/year → ${rec_data['impact_dollars']:,.0f}")
+    print(f"   Effort: {rec_data['effort_months']:.1f} months ({rec_data['effort_level']} effort)")
+    print(f"   Impact Score: {rec_data['impact_score']:.0f}/100")
+    print()
+
+# Create visual matrix
+print(f"\n{'='*80}")
+print(f"VISUAL IMPACT-EFFORT MATRIX")
+print(f"{'='*80}\n")
+
+fig, ax = plt.subplots(figsize=(12, 8))
+
+# Plot each recommendation
+for rec_name, rec_data in recommendations.items():
+    effort_mapping = {'Low': 1, 'Medium': 2, 'High': 3}
+    x = effort_mapping[rec_data['effort_level']]
+    y = rec_data['impact_score']
+    
+    color_mapping = {1: '#2ecc71', 2: '#3498db', 3: '#f39c12', 4: '#95a5a6'}
+    color = color_mapping[rec_data['priority']]
+    
+    ax.scatter(x, y, s=500, color=color, alpha=0.6, edgecolor='black', linewidth=2)
+    ax.text(x, y, rec_name.replace(' ', '\n'), ha='center', va='center', 
+            fontsize=8, fontweight='bold', wrap=True)
+
+# Add quadrant lines
+ax.axhline(y=50, color='black', linestyle='--', linewidth=1.5, alpha=0.5)
+ax.axvline(x=2, color='black', linestyle='--', linewidth=1.5, alpha=0.5)
+
+# Labels and formatting
+ax.set_xlabel('Effort Level', fontsize=14, fontweight='bold')
+ax.set_ylabel('Impact Score', fontsize=14, fontweight='bold')
+ax.set_title('Recommendation Prioritization Matrix\n(Size = Relative Impact)', fontsize=16, fontweight='bold')
+ax.set_xticks([1, 2, 3])
+ax.set_xticklabels(['Low', 'Medium', 'High'], fontsize=12)
+ax.set_ylim(0, 110)
+ax.set_xlim(0.5, 3.5)
+ax.grid(True, alpha=0.3)
+
+# Add quadrant labels
+ax.text(1.25, 75, 'PRIORITY 1\nQuick Wins', ha='center', fontsize=11, 
+        bbox=dict(boxstyle='round', facecolor='lightgreen', alpha=0.5))
+ax.text(2.75, 75, 'PRIORITY 2\nMajor Projects', ha='center', fontsize=11,
+        bbox=​​​​​​​​​​​​​​​​
+``````python
+        bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.5))
+ax.text(1.25, 25, 'PRIORITY 3\nMinor Improvements', ha='center', fontsize=11,
+        bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.5))
+ax.text(2.75, 25, 'DEPRIORITIZE\nLow ROI', ha='center', fontsize=11,
+        bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.5))
+
+plt.tight_layout()
+plt.show()
+
+print(f"\n✓ Recommendation matrix created successfully")
+
+# Store recommendations for final output
+RECOMMENDATIONS = sorted_recs
+```
+
+```markdown
+---
+
+### Step 6.2: Build 90-Day Implementation Roadmap
+
+**What you're doing:** Creating a realistic timeline for executing Priority 1 and 2 recommendations.
+
+**Expected output:**
+- Month 1: Discovery & Planning activities
+- Month 2: Quick wins & approvals
+- Month 3: Launch & monitoring
+- Clear milestones and dependencies
+```
+
+```python
+# Cell 16: Create Implementation Roadmap
+
+import pandas as pd
+from datetime import datetime, timedelta
+
+# Define roadmap activities
+roadmap_data = {
+    'Phase': [],
+    'Month': [],
+    'Week': [],
+    'Activity': [],
+    'Owner': [],
+    'Dependencies': [],
+    'Deliverable': []
+}
+
+# Month 1: Discovery & Planning
+month_1_activities = [
+    ('Week 1', 'Complete no-match root cause analysis', 'Analytics Team', 'None', 
+     'RCA report with findings'),
+    ('Week 2', 'Meet with verification tool vendors', 'Titles Team', 'None',
+     'State expansion feasibility assessment'),
+    ('Week 2', 'Obtain state licensing requirements', 'Legal/Compliance', 'None',
+     'Requirements documentation'),
+    ('Week 3', 'Calculate ROI for top 5 uncovered states', 'Analytics Team', 'Vendor meeting',
+     'Cost-benefit analysis'),
+    ('Week 4', 'Identify contacts at repeat offender companies', 'Operations', 'None',
+     'Contact list with outreach plan'),
+]
+
+for week, activity, owner, deps, deliverable in month_1_activities:
+    roadmap_data['Phase'].append('Month 1: Discovery & Planning')
+    roadmap_data['Month'].append('Month 1')
+    roadmap_data['Week'].append(week)
+    roadmap_data['Activity'].append(activity)
+    roadmap_data['Owner'].append(owner)
+    roadmap_data['Dependencies'].append(deps)
+    roadmap_data['Deliverable'].append(deliverable)
+
+# Month 2: Quick Wins & Approvals
+month_2_activities = [
+    ('Week 5', 'Implement RCA-identified process fixes', 'Titles Team', 'RCA complete',
+     'Process improvements deployed'),
+    ('Week 5', 'Begin training on verification compliance', 'Training Team', 'RCA complete',
+     'Training materials & sessions'),
+    ('Week 6', 'Present ROI case to leadership', 'Analytics Lead', 'ROI analysis complete',
+     'Approved budget for expansion'),
+    ('Week 7', 'Initiate vendor contracts for state expansion', 'Procurement', 'Budget approval',
+     'Signed vendor agreements'),
+    ('Week 8', 'Schedule meetings with repeat offender companies', 'Operations', 'Contact list ready',
+     'Scheduled business reviews'),
+]
+
+for week, activity, owner, deps, deliverable in month_2_activities:
+    roadmap_data['Phase'].append('Month 2: Quick Wins & Approvals')
+    roadmap_data['Month'].append('Month 2')
+    roadmap_data['Week'].append(week)
+    roadmap_data['Activity'].append(activity)
+    roadmap_data['Owner'].append(owner)
+    roadmap_data['Dependencies'].append(deps)
+    roadmap_data['Deliverable'].append(deliverable)
+
+# Month 3: Launch & Monitor
+month_3_activities = [
+    ('Week 9', 'Launch pilot in top 3 uncovered states', 'Titles Team', 'Vendor contracts signed',
+     'Pilot states live with verification'),
+    ('Week 10', 'Conduct first repeat offender business reviews', 'Operations', 'Meetings scheduled',
+     'Partnership agreements & process improvements'),
+    ('Week 11', 'Build monitoring dashboard', 'Analytics Team', 'Pilot launched',
+     'Live dashboard tracking key metrics'),
+    ('Week 12', 'Evaluate pilot results & plan full rollout', 'Leadership Team', 'Dashboard live',
+     'Go/no-go decision & full expansion plan'),
+]
+
+for week, activity, owner, deps, deliverable in month_3_activities:
+    roadmap_data['Phase'].append('Month 3: Launch & Monitor')
+    roadmap_data['Month'].append('Month 3')
+    roadmap_data['Week'].append(week)
+    roadmap_data['Activity'].append(activity)
+    roadmap_data['Owner'].append(owner)
+    roadmap_data['Dependencies'].append(deps)
+    roadmap_data['Deliverable'].append(deliverable)
+
+# Create DataFrame
+df_roadmap = pd.DataFrame(roadmap_data)
+
+# Display roadmap
+print(f"{'='*100}")
+print(f"90-DAY IMPLEMENTATION ROADMAP")
+print(f"{'='*100}\n")
+
+for phase in df_roadmap['Phase'].unique():
+    print(f"\n{'='*100}")
+    print(f"{phase}")
+    print(f"{'='*100}\n")
+    
+    phase_data = df_roadmap[df_roadmap['Phase'] == phase]
+    for _, row in phase_data.iterrows():
+        print(f"📅 {row['Week']}: {row['Activity']}")
+        print(f"   Owner: {row['Owner']}")
+        print(f"   Dependencies: {row['Dependencies']}")
+        print(f"   Deliverable: {row['Deliverable']}")
+        print()
+
+# Create Gantt-style visualization
+print(f"\n{'='*100}")
+print(f"VISUAL TIMELINE")
+print(f"{'='*100}\n")
+
+fig, ax = plt.subplots(figsize=(14, 10))
+
+# Prepare data for Gantt chart
+phases = df_roadmap['Phase'].unique()
+phase_colors = {'Month 1: Discovery & Planning': '#3498db', 
+                'Month 2: Quick Wins & Approvals': '#2ecc71',
+                'Month 3: Launch & Monitor': '#9b59b6'}
+
+y_pos = 0
+y_labels = []
+y_ticks = []
+
+for phase in phases:
+    phase_activities = df_roadmap[df_roadmap['Phase'] == phase]
+    
+    for idx, (_, row) in enumerate(phase_activities.iterrows()):
+        # Extract week number
+        week_num = int(row['Week'].split()[1])
+        
+        # Draw bar
+        ax.barh(y_pos, 1, left=week_num-1, height=0.8, 
+                color=phase_colors[phase], alpha=0.7, edgecolor='black')
+        
+        # Add activity label
+        activity_short = row['Activity'][:40] + '...' if len(row['Activity']) > 40 else row['Activity']
+        ax.text(week_num - 0.5, y_pos, activity_short, 
+                va='center', ha='left', fontsize=8, fontweight='bold')
+        
+        y_labels.append(f"W{week_num}")
+        y_ticks.append(y_pos)
+        y_pos += 1
+    
+    y_pos += 0.5  # Add space between phases
+
+ax.set_yticks(y_ticks)
+ax.set_yticklabels(y_labels, fontsize=9)
+ax.set_xlabel('Week', fontsize=12, fontweight='bold')
+ax.set_title('90-Day Implementation Timeline (Gantt View)', fontsize=14, fontweight='bold')
+ax.set_xlim(0, 13)
+ax.set_xticks(range(0, 13))
+ax.grid(axis='x', alpha=0.3)
+ax.invert_yaxis()
+
+# Add phase separators and labels
+current_y = 0
+for phase in phases:
+    phase_count = len(df_roadmap[df_roadmap['Phase'] == phase])
+    ax.axhline(y=current_y - 0.5, color='black', linewidth=2)
+    ax.text(-0.5, current_y + phase_count/2 - 0.5, phase.split(':')[0], 
+            rotation=90, va='center', ha='right', fontsize=10, fontweight='bold',
+            bbox=dict(boxstyle='round', facecolor=phase_colors[phase], alpha=0.3))
+    current_y += phase_count + 0.5
+
+plt.tight_layout()
+plt.show()
+
+print(f"\n✓ Implementation roadmap created successfully")
+
+# Store roadmap
+IMPLEMENTATION_ROADMAP = df_roadmap
+```
+
+```markdown
+---
+
+### Step 6.3: Define Success Metrics
+
+**What you're doing:** Setting clear, measurable targets to track improvement over 12 months.
+
+**Key metrics:**
+- Loss reduction (case count and dollars)
+- Coverage expansion (% of states)
+- Process improvement (verification & match rates)
+- Repeat offender engagement (# of partnerships)
+
+**Expected output:** Dashboard-ready KPIs with baseline, target, and measurement frequency
+```
+
+```python
+# Cell 17: Define Success Metrics
+
+# Define success metrics with baselines and targets
+success_metrics = {
+    'Total Annual Losses': {
+        'baseline': TOTAL_CASES,
+        'target_12mo': int(TOTAL_CASES * 0.7),  # 30% reduction
+        'target_6mo': int(TOTAL_CASES * 0.85),   # 15% reduction
+        'unit': 'cases',
+        'measurement': 'Monthly',
+        'owner': 'Analytics Team',
+        'calculation': 'Count of lien loss cases per period'
+    },
+    'Annual Loss Exposure': {
+        'baseline': ANNUAL_EXPOSURE,
+        'target_12mo': ANNUAL_EXPOSURE * 0.7,   # 30% reduction
+        'target_6mo': ANNUAL_EXPOSURE * 0.85,
+        'unit': 'dollars',
+        'measurement': 'Monthly',
+        'owner': 'Finance Team',
+        'calculation': 'Sum of vehicle values for all losses'
+    },
+    'State Coverage Rate': {
+        'baseline': COVERAGE_PCT,
+        'target_12mo': 85.0,  # Expand from current to 85%
+        'target_6mo': COVERAGE_PCT + 5,  # +5pp in 6 months
+        'unit': 'percentage',
+        'measurement': 'Quarterly',
+        'owner': 'Titles Team',
+        'calculation': '(Cases in covered states / Total cases) × 100'
+    },
+    'Verification Compliance Rate': {
+        'baseline': VERIFICATION_RATE,
+        'target_12mo': 100.0,
+        'target_6mo': 98.0,
+        'unit': 'percentage',
+        'measurement': 'Monthly',
+        'owner': 'Titles Team',
+        'calculation': '(Verified cases / Eligible cases) × 100'
+    },
+    'Match Success Rate': {
+        'baseline': MATCH_SUCCESS_RATE,
+        'target_12mo': 98.0,  # Reduce slippage from 5% to 2%
+        'target_6mo': 96.5,
+        'unit': 'percentage',
+        'measurement': 'Monthly',
+        'owner': 'Titles Team',
+        'calculation': '(Matched cases / Verified cases) × 100'
+    },
+    'Repeat Offender Partnerships': {
+        'baseline': 0,
+        'target_12mo': NUM_REPEAT_OFFENDERS,  # Partnership with all 7
+        'target_6mo': int(NUM_REPEAT_OFFENDERS * 0.5),  # 50% by 6 months
+        'unit': 'count',
+        'measurement': 'Quarterly',
+        'owner': 'Operations Team',
+        'calculation': 'Number of active business relationships established'
+    },
+    'Uncovered State Losses': {
+        'baseline': UNCOVERED_CASES,
+        'target_12mo': int(UNCOVERED_CASES * 0.4),  # 60% reduction via expansion
+        'target_6mo': int(UNCOVERED_CASES * 0.7),   # 30% reduction
+        'unit': 'cases',
+        'measurement': 'Monthly',
+        'owner': 'Analytics Team',
+        'calculation': 'Count of losses in states without verification tools'
+    }
+}
+
+# Display success metrics
+print(f"{'='*100}")
+print(f"SUCCESS METRICS & TARGETS")
+print(f"{'='*100}\n")
+
+for metric_name, metric_data in success_metrics.items():
+    print(f"📊 {metric_name}")
+    print(f"   {'─' * 80}")
+    
+    if metric_data['unit'] == 'percentage':
+        print(f"   Baseline (Current): {metric_data['baseline']:.1f}%")
+        print(f"   6-Month Target: {metric_data['target_6mo']:.1f}%")
+        print(f"   12-Month Target: {metric_data['target_12mo']:.1f}%")
+        improvement_12mo = metric_data['target_12mo'] - metric_data['baseline']
+        print(f"   Improvement: {improvement_12mo:+.1f} percentage points")
+    elif metric_data['unit'] == 'dollars':
+        print(f"   Baseline (Current): ${metric_data['baseline']:,.0f}")
+        print(f"   6-Month Target: ${metric_data['target_6mo']:,.0f}")
+        print(f"   12-Month Target: ${metric_data['target_12mo']:,.0f}")
+        savings_12mo = metric_data['baseline'] - metric_data['target_12mo']
+        print(f"   Expected Savings: ${savings_12mo:,.0f} ({(savings_12mo/metric_data['baseline'])*100:.0f}%)")
+    else:
+        print(f"   Baseline (Current): {metric_data['baseline']:,.0f}")
+        print(f"   6-Month Target: {metric_data['target_6mo']:,.0f}")
+        print(f"   12-Month Target: {metric_data['target_12mo']:,.0f}")
+        improvement_12mo = metric_data['target_12mo'] - metric_data['baseline']
+        print(f"   Change: {improvement_12mo:+,.0f}")
+    
+    print(f"   Measurement Frequency: {metric_data['measurement']}")
+    print(f"   Owner: {metric_data['owner']}")
+    print(f"   Calculation: {metric_data['calculation']}")
+    print()
+
+# Create visual dashboard mockup
+print(f"\n{'='*100}")
+print(f"VISUAL SUCCESS DASHBOARD")
+print(f"{'='*100}\n")
+
+fig, axes = plt.subplots(2, 3, figsize=(18, 10))
+fig.suptitle('Success Metrics Dashboard - 12 Month Targets', fontsize=18, fontweight='bold')
+
+# Metric 1: Total Losses
+ax1 = axes[0, 0]
+categories = ['Baseline', '6-Month\nTarget', '12-Month\nTarget']
+values = [success_metrics['Total Annual Losses']['baseline'],
+          success_metrics['Total Annual Losses']['target_6mo'],
+          success_metrics['Total Annual Losses']['target_12mo']]
+colors = ['#e74c3c', '#f39c12', '#2ecc71']
+bars = ax1.bar(categories, values, color=colors, alpha=0.7, edgecolor='black', linewidth=2)
+ax1.set_ylabel('Cases', fontsize=11, fontweight='bold')
+ax1.set_title('Total Annual Losses\n(Target: 30% Reduction)', fontsize=12, fontweight='bold')
+for bar, val in zip(bars, values):
+    ax1.text(bar.get_x() + bar.get_width()/2, val, f'{int(val):,}',
+             ha='center', va='bottom', fontsize=10, fontweight='bold')
+ax1.grid(axis='y', alpha=0.3)
+
+# Metric 2: Coverage Rate
+ax2 = axes[0, 1]
+baseline_cov = success_metrics['State Coverage Rate']['baseline']
+target_cov = success_metrics['State Coverage Rate']['target_12mo']
+sizes = [baseline_cov, 100-baseline_cov]
+colors_pie = ['#2ecc71', '#e74c3c']
+wedges1, texts1, autotexts1 = ax2.pie(sizes, labels=['Covered', 'Gap'], colors=colors_pie,
+                                        autopct='%1.0f%%', startangle=90)
+ax2.set_title(f'Current Coverage: {baseline_cov:.0f}%\nTarget: {target_cov:.0f}%', 
+              fontsize=12, fontweight='bold')
+
+# Metric 3: Match Success Rate
+ax3 = axes[0, 2]
+match_baseline = success_metrics['Match Success Rate']['baseline']
+match_target = success_metrics['Match Success Rate']['target_12mo']
+categories = ['Current\nSlippage', 'Target\nSlippage']
+slippage_values = [100 - match_baseline, 100 - match_target]
+colors = ['#e74c3c', '#2ecc71']
+bars = ax3.bar(categories, slippage_values, color=colors, alpha=0.7, edgecolor='black', linewidth=2)
+ax3.set_ylabel('Slippage Rate (%)', fontsize=11, fontweight='bold')
+ax3.set_title('Verification Slippage\n(Target: <2%)', fontsize=12, fontweight='bold')
+for bar, val in zip(bars, slippage_values):
+    ax3.text(bar.get_x() + bar.get_width()/2, val, f'{val:.1f}%',
+             ha='center', va='bottom', fontsize=10, fontweight='bold')
+ax3.grid(axis='y', alpha=0.3)
+
+# Metric 4: Financial Impact
+ax4 = axes[1, 0]
+loss_baseline = success_metrics['Annual Loss Exposure']['baseline'] / 1_000_000
+loss_target = success_metrics['Annual Loss Exposure']['target_12mo'] / 1_000_000
+savings = loss_baseline - loss_target
+categories = ['Current\nExposure', 'Target\nExposure', 'Expected\nSavings']
+values = [loss_baseline, loss_target, savings]
+colors = ['#e74c3c', '#f39c12', '#2ecc71']
+bars = ax4.bar(categories, values, color=colors, alpha=0.7, edgecolor='black', linewidth=2)
+ax4.set_ylabel('Dollars (Millions)', fontsize=11, fontweight='bold')
+ax4.set_title('Annual Financial Impact\n(30% Reduction)', fontsize=12, fontweight='bold')
+for bar, val in zip(bars, values):
+    ax4.text(bar.get_x() + bar.get_width()/2, val, f'${val:.1f}M',
+             ha='center', va='bottom', fontsize=10, fontweight='bold')
+ax4.grid(axis='y', alpha=0.3)
+
+# Metric 5: Uncovered State Progress
+ax5 = axes[1, 1]
+months = ['Current', 'Mo 3', 'Mo 6', 'Mo 9', 'Mo 12']
+uncovered_trajectory = [
+    success_metrics['Uncovered State Losses']['baseline'],
+    int(success_metrics['Uncovered State Losses']['baseline'] * 0.9),
+    success_metrics['Uncovered State Losses']['target_6mo'],
+    int(success_metrics['Uncovered State Losses']['baseline'] * 0.5),
+    success_metrics['Uncovered State Losses']['target_12mo']
+]
+ax5.plot(months, uncovered_trajectory, marker='o', linewidth=3, markersize=10, color='#3498db')
+ax5.fill_between(range(len(months)), uncovered_trajectory, alpha=0.3, color='#3498db')
+ax5.set_ylabel('Cases', fontsize=11, fontweight='bold')
+ax5.set_title('Uncovered State Loss Reduction\n(Expansion Trajectory)', fontsize=12, fontweight='bold')
+ax5.grid(True, alpha=0.3)
+for i, val in enumerate(uncovered_trajectory):
+    ax5.text(i, val + 2, f'{int(val)}', ha='center', fontsize=9, fontweight='bold')
+
+# Metric 6: Repeat Offender Partnerships
+ax6 = axes[1, 2]
+quarters = ['Q1', 'Q2', 'Q3', 'Q4']
+partnerships = [0, 2, 4, NUM_REPEAT_OFFENDERS]
+ax6.bar(quarters, partnerships, color='#9b59b6', alpha=0.7, edgecolor='black', linewidth=2)
+ax6.axhline(y=NUM_REPEAT_OFFENDERS, color='green', linestyle='--', linewidth=2, 
+            label=f'Target: {NUM_REPEAT_OFFENDERS}')
+ax6.set_ylabel('Active Partnerships', fontsize=11, fontweight='bold')
+ax6.set_title(f'Repeat Offender Engagement\n(Target: {NUM_REPEAT_OFFENDERS} partnerships)', 
+              fontsize=12, fontweight='bold')
+ax6.legend()
+ax6.grid(axis='y', alpha=0.3)
+for i, val in enumerate(partnerships):
+    ax6.text(i, val + 0.2, f'{int(val)}', ha='center', fontsize=10, fontweight='bold')
+
+plt.tight_layout()
+plt.show()
+
+print(f"\n✓ Success metrics dashboard created successfully")
+print(f"\n{'='*100}")
+print(f"KEY TAKEAWAY:")
+print(f"{'='*100}")
+print(f"If we execute these recommendations successfully:")
+print(f"  • Reduce annual losses by 30% ({TOTAL_CASES:,} → {int(TOTAL_CASES*0.7):,} cases)")
+print(f"  • Save ${(ANNUAL_EXPOSURE * 0.3)/1_000_000:.1f}M annually")
+print(f"  • Expand coverage from {COVERAGE_PCT:.0f}% to 85%")
+print(f"  • Reduce slippage from {100-MATCH_SUCCESS_RATE:.0f}% to 2%")
+
+# Store success metrics
+SUCCESS_METRICS = success_metrics
+```
+
+```markdown
+---
+
+### Step 6.4: Generate Executive Summary Email
+
+**What you're doing:** Creating the follow-up email to stakeholders summarizing findings.
+
+**Email structure:**
+1. Context (why you're writing)
+2. Most important findings first
+3. Supporting details
+4. Next steps
+5. Attachment reference
+
+**Expected output:** Ready-to-send email text
+```
+
+```python
+# Cell 18: Generate Executive Summary Email
+
+from datetime import datetime
+
+# Generate email content
+email_subject = "Follow-Up: Impound Lien Loss Analysis - Key Findings & Recommendations"
+
+email_body = f"""
+Hi Team,
+
+Thanks again for your time in our discussion on {datetime.now().strftime('%B %d, %Y')}. I'm writing to close out the follow-up items we discussed regarding the impound lien loss investigation.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+KEY FINDINGS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. DATA SCOPE CONFIRMATION
+   ✓ Confirmed: {TOTAL_CASES:,} cases analyzed (July 2024 - July 2025)
+   ✓ All cases are TRUE impound losses only (abandoned vehicles excluded)
+
+2. FRAUD ASSESSMENT: NO EVIDENCE DETECTED
+   ✓ Repeat offender companies (7 total) target LOWER value vehicles
+     - Repeat offenders: ${AVG_VALUE_REPEAT:,.0f} average
+     - Portfolio benchmark: ${BENCHMARK_VALUE:,.0f} average  
+     - Difference: {((AVG_VALUE_REPEAT - BENCHMARK_VALUE) / BENCHMARK_VALUE * 100):+.0f}%
+   ✓ This pattern rules out systematic targeting of high-value assets
+   ✓ Repeat offenses appear to be operational issues at high-volume facilities
+
+3. COVERAGE GAP IDENTIFIED: 23% OPPORTUNITY
+   • {COVERAGE_PCT:.0f}% of cases ({COVERED_CASES:,}) occur in states WITH verification coverage
+   • {COVERAGE_GAP_PCT:.0f}% of cases ({UNCOVERED_CASES:,}) occur in states WITHOUT coverage
+   • The {COVERAGE_GAP_PCT:.0f}% gap represents ~${UNCOVERED_EXPOSURE/1_000_000:.1f}M in annual controllable exposure
+   • Top uncovered states: Texas ({len(df_impound[df_impound['state']=='TX'])if 'TX' in df_impound['state'].values else 'X'} cases), 
+     Florida ({len(df_impound[df_impound['state']=='FL']) if 'FL' in df_impound['state'].values else 'X'} cases), 
+     Illinois ({len(df_impound[df_impound['state']=='IL']) if 'IL' in df_impound['state'].values else 'X'} cases)
+
+4. VERIFICATION PROCESS PERFORMANCE: STRONG WITH MINOR LEAKAGE
+   ✓ Process adherence: {VERIFICATION_RATE:.0f}% of eligible cases are verified (excellent)
+   ✓ Match success rate: {MATCH_SUCCESS_RATE:.0f}% (strong effectiveness)
+   ⚠ Slippage: {SLIPPAGE_RATE:.0f}% ({SLIPPAGE_CASES:,} cases) still slip through despite verification
+   → Root cause analysis needed to understand why these {SLIPPAGE_CASES:,} cases weren't prevented
+
+5. REPEAT OFFENDER ANALYSIS
+   • 7 companies with 3+ losses account for {REPEAT_OFFENDER_CASES:,} cases ({(REPEAT_OFFENDER_CASES/TOTAL_CASES)*100:.0f}% of total)
+   • Pattern is consistent with high-volume operators, not malicious activity
+   • {repeat_covered_pct:.0f}% of repeat offender cases are in covered states vs {repeat_uncovered_pct:.0f}% uncovered
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RECOMMENDATIONS (Prioritized by ROI)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎯 PRIORITY 1: Expand Verification Coverage to Uncovered States
+   Impact: {UNCOVERED_CASES:,} cases/year (~${UNCOVERED_EXPOSURE/1_000_000:.1f}M)
+   Timeline: 6-9 months
+   Next Step: Meet with ADD123/Ventiling to discuss state expansion feasibility
+
+📋 PRIORITY 2: Root Cause Analysis of {SLIPPAGE_RATE:.0f}% No-Match Cases  
+   Impact: {SLIPPAGE_CASES:,} cases/year (~${(SLIPPAGE_CASES * AVG_IMPOUND_VALUE)/1_000_000:.2f}M)
+   Timeline: 2-4 weeks
+   Next Step: Pull detailed records for all {SLIPPAGE_CASES:,} no-match cases and interview titles team
+
+⚡ PRIORITY 3: Establish Direct Relationships with Repeat Offenders
+   Impact: ~{int(REPEAT_OFFENDER_CASES * 0.3):,} cases/year (30% reduction estimate)
+   Timeline: 1-2 months  
+   Next Step: Identify key contacts at the 7 repeat offender companies
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PROJECTED IMPACT (12-Month Targets)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+If we execute these recommendations successfully:
+• Reduce annual losses by 30%: {TOTAL_CASES:,} → {int(TOTAL_CASES*0.7):,} cases
+• Annual savings: ~${(ANNUAL_EXPOSURE * 0.3)/1_000_000:.1f}M  
+• Expand coverage: {COVERAGE_PCT:.0f}% → 85%
+• Reduce slippage: {SLIPPAGE_RATE:.0f}% → 2%
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+NEXT STEPS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Review attached 3-page deck for detailed analysis and visualizations
+2. Confirm alignment on prioritization and timeline
+3. Schedule follow-up meeting to discuss budget approval for state expansion
+4. Begin Week 1 activities per 90-day roadmap (RCA and vendor meetings)
+
+Please let me know if you have any questions or would like to discuss any of these findings in more detail.
+
+Best regards,
+[Your Name]
+
+Attachment: Impound_Lien_Loss_Analysis_Executive_Deck.pdf
+"""
+
+# Display email
+print(f"{'='*100}")
+print(f"EXECUTIVE SUMMARY EMAIL - READY TO SEND")
+print(f"{'='*100}\n")
+print(f"SUBJECT: {email_subject}\n")
+print(f"{'─'*100}\n")
+print(email_body)
+
+# Save to file
+with open('impound_lien_loss_email.txt', 'w') as f:
+    f.write(f"SUBJECT: {email_subject}\n\n")
+    f.write(email_body)
+
+print(f"\n{'='*100}")
+print(f"✓ Email saved to: impound_lien_loss_email.txt")
+print(f"{'='*100}")
+```
+
+```markdown
+---
+
+### Step 6.5: Export Final Data Summary
+
+**What you're doing:** Creating a data summary file for reference and audit trail.
+
+**Expected output:** 
+- CSV with all key metrics
+- Summary statistics
+- Data dictionary
+```
+
+```python
+# Cell 19: Export Final Data Summary
+
+# Create comprehensive summary dictionary
+final_summary = {
+    'Analysis Period': f"{df_impound['loss_date'].min().strftime('%Y-%m-%d')} to {df_impound['loss_date'].max().strftime('%Y-%m-%d')}",
+    'Total Cases Analyzed': TOTAL_CASES,
+    'Average Monthly Loss Rate': f"{AVG_MONTHLY_RATE:.1f}",
+    'Trend Status': TREND_STATUS,
+    
+    # Financial Metrics
+    'Total Exposure ($)': TOTAL_EXPOSURE,
+    'Annual Exposure ($)': ANNUAL_EXPOSURE,
+    'Average Vehicle Value ($)': AVG_IMPOUND_VALUE,
+    'Portfolio Benchmark Value ($)': BENCHMARK_VALUE,
+    
+    # Fraud Assessment
+    'Fraud Risk Level': FINAL_FRAUD_RISK,
+    'Fraud Conclusion': FRAUD_CONCLUSION,
+    
+    # Coverage Metrics
+    'Covered State Cases': COVERED_CASES,
+    'Covered State Percentage': f"{COVERAGE_PCT:.1f}%",
+    'Uncovered State Cases': UNCOVERED_CASES,
+    'Uncovered State Percentage': f"{COVERAGE_GAP_PCT:.1f}%",
+    'Uncovered State Exposure ($)': UNCOVERED_EXPOSURE,
+    
+    # Process Metrics
+    'Verification Rate (%)': f"{VERIFICATION_RATE:.1f}%",
+    'Match Success Rate (%)': f"{MATCH_SUCCESS_RATE:.1f}%",
+    'Slippage Rate (%)': f"{SLIPPAGE_RATE:.1f}%",
+    'Slippage Cases': SLIPPAGE_CASES,
+    
+    # Repeat Offender Metrics
+    'Repeat Offender Companies': NUM_REPEAT_OFFENDERS,
+    'Repeat Offender Cases': REPEAT_OFFENDER_CASES,
+    'Repeat Offender Avg Value ($)': AVG_VALUE_REPEAT,
+    'Repeat Offender Percentage': f"{(REPEAT_OFFENDER_CASES/TOTAL_CASES)*100:.1f}%",
+    
+    # Target Metrics (12-month)
+    'Target: Total Cases': int(TOTAL_CASES * 0.7),
+    'Target: Coverage Rate': '85.0%',
+    'Target: Match Success Rate': '98.0%',
+    'Target: Annual Savings ($)': ANNUAL_EXPOSURE * 0.3,
+}
+
+# Convert to DataFrame for display
+df_summary = pd.DataFrame(list(final_summary.items()), columns=['Metric', 'Value'])
+
+# Display summary
+print(f"{'='*100}")
+print(f"FINAL DATA SUMMARY")
+print(f"{'='*100}\n")
+print(df_summary.to_string(index=False))
+
+# Export to CSV
+df_summary.to_csv('impound_lien_loss_summary.csv', index=False)
+
+# Also export detailed case-level data
+df_impound_export = df_impound[[
+    'case_id', 'loss_date', 'state', 'vehicle_value', 'coverage_status', company_column
+]].copy()
+df_impound_export.to_csv('impound_lien_loss_detailed_data.csv', index=False)
+
+# Export recommendations
+df_recommendations_export = pd.DataFrame([
+    {
+        'Recommendation': rec_name,
+        'Priority': rec_data['priority'],
+        'Impact (Cases)': rec_data['impact_cases'],
+        'Impact ($)': rec_data['impact_dollars'],
+        'Effort (Months)': rec_data['effort_months'],
+        'Description': rec_data['description']
+    }
+    for rec_name, rec_data in RECOMMENDATIONS
+])
+df_recommendations_export.to_csv('impound_lien_loss_recommendations.csv', index=False)
+
+print(f"\n{'='*100}")
+print(f"✓ FILES EXPORTED:")
+print(f"{'='*100}")
+print(f"  1. impound_lien_loss_summary.csv - High-level metrics")
+print(f"  2. impound_lien_loss_detailed_data.csv - Case-level data ({len(df_impound_export):,} records)")
+print(f"  3. impound_lien_loss_recommendations.csv - Prioritized actions")
+print(f"  4. impound_lien_loss_email.txt - Executive email")
+```
+
+```markdown
+---
+
+## 🎉 PROJECT COMPLETE!
+
+### What You've Accomplished:
+
+✅ **Phase 1**: Collected and cleaned {TOTAL_CASES:,} impound lien loss cases  
+✅ **Phase 2**: Identified {COVERAGE_GAP_PCT:.0f}% coverage gap representing ${UNCOVERED_EXPOSURE/1_000_000:.1f}M exposure  
+✅ **Phase 3**: Analyzed trends, repeat offenders, and patterns  
+✅ **Phase 4**: **Determined NO FRAUD RISK** - cleared stakeholder concerns  
+✅ **Phase 5**: Created 7 executive-ready visualizations  
+✅ **Phase 6**: Built prioritized roadmap with ${(ANNUAL_EXPOSURE * 0.3)/1_000_000:.1f}M savings opportunity  
+
+### Deliverables Ready:
+- 📊 3-page executive deck (create separately using visualizations)
+- 📧 Follow-up email (saved to file)
+- 📈 7 publication-quality charts
+- 📋 90-day implementation roadmap
+- 🎯 Success metrics dashboard
+- 💾 3 CSV exports for audit trail
+
+### Next Steps:
+1. Review all outputs with your lead
+2. Incorporate visualizations into PowerPoint/Google Slides deck
+3. Send follow-up email to stakeholders
+4. Schedule presentation meeting
+5. Begin Week 1 roadmap activities
+
+---
+
+## Key Takeaways for Future Projects:
+
+1. **Always lead with the answer** - Don't make stakeholders hunt for conclusions
+2. **MECE everything** - Every analysis should be mutually exclusive, collectively exhaustive
+3. **Quantify impact** - Turn cases into dollars, percentages into business impact
+4. **Prioritize by ROI** - Use impact-effort matrix to rank recommendations
+5. **Be intellectually honest** - "No fraud detected" is a valuable finding!
+6. **Tell a story** - Data without narrative is just numbers
+
+---
+
+**Congratulations! You've completed a McKinsey/Bain-level analysis.** 🎯
+```
+
+-----
+
+## End of Notebook
+
+**Total Cells:** 19  
+**Estimated Completion Time:** 2-3 weeks  
+**Output:** Complete executive analysis with recommendations
+
+-----
+
+### Usage Instructions:
+
+1. **Start at Cell 1** and work sequentially through each cell
+1. **Read the markdown** before each code cell to understand the objective
+1. **Update TODO items** with your actual data sources and column names
+1. **Run each cell** and review outputs before proceeding
+1. **Save outputs** as you go (especially visualizations)
+1. **Ask questions** when you get stuck - don’t guess!
+
+### Pro Tips:
+
+- **Don’t skip the markdown** - it explains WHY you’re doing each step
+- **Validate early** - Check your filtering logic with stakeholders in Phase 1
+- **Document assumptions** - Use comments liberally in your code
+- **Save often** - Export intermediate results to CSV
+- **Review with lead** - Show Phase 1-2 outputs before continuing
+
